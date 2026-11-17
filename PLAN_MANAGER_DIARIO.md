@@ -15,6 +15,44 @@ Esta sección manda sobre el resto del plan. Todo lo demás (manager, brief, rep
 que se gana son los pagos. El negocio es rentable solo si, en el tiempo, **pagos cobrados > cuotas + resets + costos**
 (Claude, luz, VPS, impuestos). El trabajo del plan es averiguar eso rápido y barato, y escalar solo con evidencia.
 
+### P0. Situación real (lo que contó el usuario, 2026-11-17)
+- **Presupuesto**: 50–100 USD/mes para cuotas + 20 USD/mes de Claude Pro. Expectativa inicial: fondear en 2–3 meses.
+- **Lo que pasó en 2 meses**: +2 % las primeras 2 semanas, después ~40 días de pérdidas diarias chicas y constantes; hoy igual
+  o peor que al inicio. En el camino: xeno_stokes y rough_vol entraron con PF ≥ 2 y resultaron **sin edge** (corregido en
+  los tests); otras estrategias dejaron de validar; y un test del Thinker concluyó que convenía **dejar todas prendidas**.
+
+**Lectura de esto (hipótesis principal a comprobar, no certeza):** el patrón "muchas pérdidas chicas, todos los días" es
+la firma típica de una cartera grande cuyo **edge promedio después de costos es ~0 o negativo**. Diversificar baja la
+variabilidad, pero **no crea edge**: si cada estrategia en promedio no gana, juntar 80 da una curva suave que baja despacio
+(spread, swaps, comisiones y slippage se cobran siempre). Que un test diga "mejor todas prendidas que sacar las que no
+validan" es consistente con eso: si el criterio de validación no predice qué estrategia va a ganar (lo mismo que mostró
+`diversificacion.py`: elegir "las mejores" no le gana al azar), sacar o dejar da casi igual, y el test elige la que más baja la
+volatilidad. Además, PF 2 que no era real es el sesgo de selección que ya mide el Deflated Sharpe: de muchas pruebas, alguna
+sale linda por azar.
+
+**Consecuencias para el plan (cambian el orden):**
+1. **Proteger lo ya pagado**: bajar el riesgo de las 4 cuentas a la mitad mientras dura el diagnóstico (no apagar todo:
+   así se sigue midiendo). Cada cuenta viva es plata ya invertida; quemarla para "recuperar" es lo peor con este presupuesto.
+2. **No comprar ni resetear** cuentas hasta que el diagnóstico dé verde. Con 50–100/mes, una cuota de 25k con promo (~115) o
+   un reset se come 1–2 meses de presupuesto.
+3. **Diagnóstico de los 2 meses en vivo (Python, sin Claude)**, en este orden:
+   - R realizado por estrategia y por familia vs. el OOS recortado al 57 %; con 2 meses hay pocos trades por estrategia, así
+     que se mira **por familia y por categoría de símbolo**.
+   - **Costos**: cuánto del resultado se fue en spread, swap y comisión (sospechosos: exóticos USDZAR/USDMXN/USDPLN/EURSEK y
+     cripto alt, que tienen spreads y swaps altos).
+   - **Ejecución**: diferencia entre el precio del backtest y el real; rechazos de SL del trailing (ya reportados en la vigilancia).
+   - **¿Mala suerte o backtest inflado?** Con los caminos bootstrap de `calculadora_fondeo`, ¿qué probabilidad tenía el backtest
+     de estar plano o abajo a los 60 días? Si era < 5 %, el backtest está sobreestimado y hay que recortar más el edge.
+4. **Cartera núcleo chica en vez de 80**: solo estrategias que pasen validación estricta (Deflated Sharpe + N1 con
+   datos ≤ fecha), cuyo resultado en vivo no las contradiga, en **símbolos líquidos y baratos**; por defecto, **apagada** la que no
+   valida. Revisar qué test dio "mejor todas prendidas" y si se hizo fuera de muestra y con costos.
+5. **Expectativa realista**: un 10 % con un edge modesto y riesgo prudente suele llevar **4–8 meses**, no 2–3; correr para
+   llegar antes es lo que quema cuentas. Usar el `t50` de la calculadora **con el edge ajustado por lo visto en vivo**.
+6. **Claude con moderación** (plan Pro tiene límites): el brief diario y el diagnóstico los hace Python; Claude se usa para
+   decidir en días con disparador y para revisar el diagnóstico, no para correr cosas que Python puede hacer.
+7. **Cuando haya evidencia de edge**, la forma más barata de comprobarlo con plata real es una cuenta chica (1-Step Pro 5k
+   ≈ 59, 10k ≈ 109 de lista) y el primer **pago cobrado**: eso es la prueba, no la curva.
+
 ### P1. La única métrica que importa: el libro del negocio
 - `manager/negocio.csv`: cada cuota, reset, complemento y **cada pago cobrado** (fecha, cuenta, firma, monto, estado).
 - El brief abre con: **resultado neto del mes y acumulado**, pagos pendientes/próximos, cuotas gastadas, y
@@ -68,9 +106,10 @@ que se gana son los pagos. El negocio es rentable solo si, en el tiempo, **pagos
 ### P6. Orden de ejecución revisado (de lo que más plata protege/gana a lo que menos)
 | # | Qué | Por qué | Esfuerzo |
 |---|---|---|---|
+| 0 | Bajar riesgo a la mitad y congelar compras/resets (P0) | proteger lo ya pagado | minutos |
 | 1 | Seguridad P3 (pérdida diaria, cta2, riesgo por idea) | evita quemar cuentas por configuración | horas |
 | 2 | Libro del negocio + brief mínimo (P1, §7 sin Argos) | ver si se gana plata de verdad | 1–2 días |
-| 3 | Edge realizado vs. backtest (P2) | saber si hay algo que escalar | 1–2 días |
+| 3 | Diagnóstico de los 2 meses + edge realizado vs. backtest (P0, P2) y cartera núcleo | saber si hay algo que escalar | 2–4 días |
 | 4 | Replay con políticas simples P0/P2 + árbol de fondeo (§8b, §8c) | ¿pasa y cobra con costos reales? | 1–2 semanas |
 | 5 | Matriz de construcción de cartera y cartera por cuenta (§8d, P4) | más pagos con menos quemas | 1 semana |
 | 6 | Argos en el replay, comparado contra la mejor política fija | ¿agrega valor la IA? | 1–2 semanas |
