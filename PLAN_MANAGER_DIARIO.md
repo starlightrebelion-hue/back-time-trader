@@ -21,6 +21,22 @@ que se gana son los pagos. El negocio es rentable solo si, en el tiempo, **pagos
   o peor que al inicio. En el camino: xeno_stokes y rough_vol entraron con PF ≥ 2 y resultaron **sin edge** (corregido en
   los tests); otras estrategias dejaron de validar; y un test del Thinker concluyó que convenía **dejar todas prendidas**.
 
+**Corrección importante (2026-11-17): las 4 cuentas existen desde hace ~1 año**, no 2 meses; los 2 meses son los de la
+versión actual del sistema. En un año ninguna se fondeó, y cta2 tuvo su mayor balance en abril en 100.060 (+0,06 % sobre el
+inicial) y en octubre estaba en ~93.300. Esto cambia el diagnóstico:
+- **Hay mucho más dato**: un año de historial real en las 4 terminales MT5 (el mapeo cuenta↔terminal ya se hizo y se
+  verificó, ver `accounts_conditions.json`). El diagnóstico se hace sobre **el año entero, segmentado por versión del
+  sistema** (fechas de `strategy_versions.json` / cambios de cartera), para ver si alguna etapa tuvo edge real.
+- **Un año sin pasar ninguna de 4 es evidencia fuerte** de que lo operado hasta ahora no tuvo edge suficiente después de
+  costos. No prueba que la versión actual falle, pero **sube la vara**: la versión nueva tiene que demostrar edge en el
+  diagnóstico y en el replay antes de recibir más plata o más tiempo.
+- **Lo ya pagado no vuelve** (costo hundido): las decisiones miran hacia adelante. Mientras las cuentas no cobren cuota mensual,
+  mantenerlas vivas con riesgo bajo es gratis y conserva la opción; verificar si la firma tiene regla de **inactividad** (si
+  hay que operar cada N días para no perderlas).
+- **Puerta de decisión dura**: si el diagnóstico del año y el replay no muestran edge que pase y cobre, la recomendación es
+  **frenar gastos** (cuotas, resets y, si hace falta, la suscripción), dejar las cuentas al mínimo de riesgo, y priorizar un
+  ingreso estable. Volver a invertir solo con una estrategia que muestre edge fuera de muestra y con costos.
+
 **Lectura de esto (hipótesis principal a comprobar, no certeza):** el patrón "muchas pérdidas chicas, todos los días" es
 la firma típica de una cartera grande cuyo **edge promedio después de costos es ~0 o negativo**. Diversificar baja la
 variabilidad, pero **no crea edge**: si cada estrategia en promedio no gana, juntar 80 da una curva suave que baja despacio
@@ -35,14 +51,14 @@ sale linda por azar.
    así se sigue midiendo). Cada cuenta viva es plata ya invertida; quemarla para "recuperar" es lo peor con este presupuesto.
 2. **No comprar ni resetear** cuentas hasta que el diagnóstico dé verde. Con 50–100/mes, una cuota de 25k con promo (~115) o
    un reset se come 1–2 meses de presupuesto.
-3. **Diagnóstico de los 2 meses en vivo (Python, sin Claude)**, en este orden:
+3. **Diagnóstico del año en vivo, segmentado por versión (Python, sin Claude)**, en este orden:
    - R realizado por estrategia y por familia vs. el OOS recortado al 57 %; con 2 meses hay pocos trades por estrategia, así
      que se mira **por familia y por categoría de símbolo**.
    - **Costos**: cuánto del resultado se fue en spread, swap y comisión (sospechosos: exóticos USDZAR/USDMXN/USDPLN/EURSEK y
      cripto alt, que tienen spreads y swaps altos).
    - **Ejecución**: diferencia entre el precio del backtest y el real; rechazos de SL del trailing (ya reportados en la vigilancia).
    - **¿Mala suerte o backtest inflado?** Con los caminos bootstrap de `calculadora_fondeo`, ¿qué probabilidad tenía el backtest
-     de estar plano o abajo a los 60 días? Si era < 5 %, el backtest está sobreestimado y hay que recortar más el edge.
+     de estar plano o abajo a los 60 días (y a los 365)? Si era < 5 %, el backtest está sobreestimado y hay que recortar más el edge.
 4. **Cartera núcleo chica en vez de 80**: solo estrategias que pasen validación estricta (Deflated Sharpe + N1 con
    datos ≤ fecha), cuyo resultado en vivo no las contradiga, en **símbolos líquidos y baratos**; por defecto, **apagada** la que no
    valida. Revisar qué test dio "mejor todas prendidas" y si se hizo fuera de muestra y con costos.
@@ -143,7 +159,7 @@ con el edge ajustado por lo visto en vivo (no con el del backtest).
 | 0 | Bajar riesgo a la mitad y congelar compras/resets (P0) | proteger lo ya pagado | minutos |
 | 1 | Seguridad P3 (pérdida diaria, cta2, riesgo por idea) | evita quemar cuentas por configuración | horas |
 | 2 | Libro del negocio + brief mínimo (P1, §7 sin Argos) | ver si se gana plata de verdad | 1–2 días |
-| 3 | Diagnóstico de los 2 meses + edge realizado vs. backtest (P0, P2) y cartera núcleo | saber si hay algo que escalar | 2–4 días |
+| 3 | Diagnóstico del año (por versión) + edge realizado vs. backtest (P0, P2) y cartera núcleo | saber si hay algo que escalar | 2–4 días |
 | 4 | Replay con políticas simples P0/P2 + árbol de fondeo (§8b, §8c) | ¿pasa y cobra con costos reales? | 1–2 semanas |
 | 5 | Matriz de construcción de cartera y cartera por cuenta (§8d, P4) | más pagos con menos quemas | 1 semana |
 | 6 | Argos en el replay, comparado contra la mejor política fija | ¿agrega valor la IA? | 1–2 semanas |
