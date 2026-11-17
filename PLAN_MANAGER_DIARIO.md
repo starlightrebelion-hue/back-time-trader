@@ -84,7 +84,10 @@ Además alguna cuenta fondeada se va a perder, y hay que reponerla; por eso se p
 - Las 4 cuentas actuales suman 275.000: **si se fondearan y rindieran 2 % sostenido, alcanzarían para el mínimo y se
   acercarían al normal**. El problema hoy no es tamaño: es que todavía no pasan (P0).
 - cta3 cobra 90 %, las demás 100 %. Restar impuestos.
-- Más de 200–300k en una sola firma concentra el riesgo de contraparte y puede chocar con su tope por persona: repartir en 2–3.
+- **Tope de FundingTraders: 400.000 fondeados por persona** (dato del usuario, 2026-11-17). Alcanza para el mínimo
+  (150–200k con colchón) dentro de una sola firma; para la meta normal (300–400k con colchón) quedaría **justo en el tope**, sin
+  margen para reponer cuentas perdidas. Por eso, a partir del hito 5, **sumar una segunda firma** (también reparte el riesgo
+  de contraparte). Las 4 cuentas actuales (275k) entran en el tope.
 
 **Escalera de hitos (no saltear):**
 1. **Diagnóstico verde** (P0/P2): hay edge real en vivo después de costos.
@@ -138,7 +141,7 @@ con el edge ajustado por lo visto en vivo (no con el del backtest).
 - **Riesgo de contraparte**: la firma puede cambiar reglas, demorar o negar pagos, o cerrar (pasó con varias en 2024–25).
   Mitigación: cobrar en cada ciclo apenas se pueda (en Pro, cobrar además reinicia el piso), no acumular ganancia sin retirar,
   y cuando haya evidencia de rentabilidad, repartir entre 2–3 firmas. Revisar el **tope de capital fondeado por persona** y
-  las reglas sobre operar la misma estrategia en varias cuentas.
+  las reglas sobre operar la misma estrategia en varias cuentas (tope FundingTraders: 400k fondeados, ver P7).
 - **Fase fondeada = modo ingreso**: ya no se busca máximo retorno sino **pagos regulares y vida larga de la cuenta**. El
   riesgo se fija para que la probabilidad de quemar la cuenta en 12 meses sea baja (p. ej. < 10–15 %), aunque cobre menos por mes.
   Una cuenta que paga 2 % al mes durante 2 años vale mucho más que una que paga 6 % dos veces y se quema.
