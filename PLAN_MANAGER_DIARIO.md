@@ -156,6 +156,71 @@ test muestra mejora.
 con tu OK en vivo* solo si, al cierre de X: (a) retorno ajustado por riesgo ≥ el tuyo, (b) DD máximo no peor, (c) cero
 violaciones de límites duros, y (d) la ventaja se mantiene en la segunda mitad del período (no solo en una racha).
 
+## 8b. Fase 0: replay histórico de Argos (dic-2025 → hoy), antes del test en vivo
+
+Idea: en vez de esperar meses para juzgar a Argos, **rebobinar al corte de noviembre de 2025** y dejarlo "vivir" día a día
+hasta hoy sobre datos que ya pasaron, con el mismo ciclo que tendría en vivo. Da un año de evidencia en días de cómputo.
+Es un backtest *de la gestión* (no solo de las estrategias): lo que se mide es la política de Argos.
+
+**Ciclo del replay (un día simulado = una iteración, todo en Python salvo la decisión):**
+1. *Corte*: `T` = día simulado. El harness solo expone datos con fecha ≤ `T` (barras, ledger simulado, WFO).
+2. *Reporte automático* (Python, determinista): el mismo brief del §7 (estado de cuentas, drift, candidatas, fondeo,
+   memoria de decisiones/lecciones hasta `T`).
+3. *Decisión*: Claude Code lee el reporte y devuelve **un JSON de decisiones** (esquema fijo, §8). El harness lo valida
+   contra los límites duros (§3); lo que viole se rechaza y se loguea.
+4. *Ejecución simulada* de `T` a `T+1` con los trades históricos de las estrategias (con sus pesos/pausas vigentes),
+   aplicando guardián, escalador, DD 10 % trailing, 4 % diario, lote mínimo y costos.
+5. *Log y memoria*: se anota la decisión; al vencer su horizonte se etiqueta acierto/fallo y se escribe la lección.
+6. Cada mes simulado (o cuando Argos lo pida) se **re-corre WFO con datos hasta `T`** y el universo de candidatas se
+   actualiza. Es la política "reentrenar cada W" de `politicas_reentreno.py` (P1r, la honesta), ahora decidida por Argos.
+
+**Arranque en cero (corte nov-2025):**
+- Corridas WFO nuevas con ventanas que terminan en nov-2025; de ahí sale la cartera inicial y las estrategias validadas
+  (criterio N1; N2/contexto/régimen registradas como información, igual que en §8).
+- Universo = **solo estrategias y símbolos que existían y validaban con datos ≤ nov-2025**. Nada descubierto después
+  (evita sesgo de supervivencia y de futuro).
+- Cuentas simuladas: las 4 (25k/100k/100k/50k) con reglas de la firma (`accounts.json`, `accounts_conditions.json`).
+
+**Objetivo y cómo se mide.** "Pasar las cuentas de fondeo lo más rápido posible sin quemarlas":
+- Un solo año es **una trayectoria**: con suerte o mala suerte engaña. Por eso se lanzan **arranques escalonados**
+  (una cuenta nueva cada 1–2 semanas durante el año) y se reporta la **distribución**: % que pasa, días a pasar
+  (mediana y p90), % que se quema, % que queda trabada, costo por cuenta fondeada (resets/compras).
+- Contra qué se compara (mismos datos, mismas reglas): (1) congelada desde nov-2025 (P0), (2) la auto-pausa actual (P2),
+  (3) ERC estático con reentreno mensual (P1r), (4) tu criterio de gestión si lo podés reconstruir. Argos es una política
+  más (P9) en el mismo arnés del sandbox que ya existe (`sandbox/politicas`). Si no le gana a P0/P2, no justifica su complejidad.
+- Salidas: curva de equity y de DD por cuenta (formato de la solapa en vivo), `decisiones.jsonl`, `lecciones.md`,
+  tablas de aciertos/fallos por tipo de decisión y por capa (N1/N2/contexto/régimen).
+
+**Realismo de ejecución (si no, el resultado no vale):**
+- Spread, slippage y swaps por símbolo (`symbol_specs.json`); el spread histórico real no está: usar valores
+  conservadores y repetir con un escenario peor (×1,5–2).
+- Lote mínimo y redondeo hacia abajo (ya pasa en cta1 con metales: no abre), margen, horario de mercado, fines de semana.
+- Latencia de decisión: Argos decide con el cierre de `T` y ejecuta en `T+1` (nunca en la misma vela).
+- Los trades salen del motor real de las estrategias con los parámetros que el WFO habría dado a esa fecha, no de los
+  parámetros finales (esa es la fuga más común).
+
+**Controles de fuga de información (críticos):**
+- *Datos*: filtro estricto por fecha en cada lectura; test automático que falla si algún archivo tiene fecha > `T`.
+- *Modelo*: Claude conoce eventos de mercado hasta mediados de 2026, es decir, **parte del período replayado**. Mitigación:
+  el reporte **anonimiza** fechas y símbolos (estrategia_17, par_A, día +143) y no incluye noticias; se prohíbe
+  explícitamente razonar con conocimiento externo y se audita en la justificación. Aun así queda un riesgo residual que se
+  declara en el informe; lo definitivo es el test en vivo (§8).
+- *Parámetros del arnés*: se congelan (límites, horizontes, prompts, criterio de éxito) **antes** de correr; si se
+  cambian, se vuelve a correr desde cero y se anota. Prohibido iterar el prompt mirando el resultado del año completo:
+  dejar un período de *calibración* (p. ej. dic–feb) para afinar y **un período ciego** (mar→hoy) para evaluar.
+
+**Costo y ejecución.**
+- ~250 días hábiles × 1 llamada a Claude Code ≈ barato; los reportes y la simulación son Python puro. El cuello de botella
+  es **el WFO repetido** (`wfo_runner.py`, necesita los datos de mercado locales): correr en la laptop/PC, no en la nube.
+- Para ahorrar y acotar el ruido, Claude decide **solo los días con disparador** (alerta, drift rojo, vencimiento de
+  reentreno, cuenta cerca de meta/límite, resultado de un WFO nuevo) y cada lunes como revisión semanal; el resto
+  "mantener". Se deja registrado cuántas decisiones fueron "nada".
+- Reproducibilidad: se guarda el reporte y la respuesta cruda de cada día; con eso se puede reauditar sin rellamar al modelo.
+
+**Etapas.** (a) Armar el arnés y validarlo con una política tonta (P0) hasta que reproduzca resultados conocidos de
+`sandbox/politicas`; (b) WFO a nov-2025 y cartera inicial; (c) calibración 3 meses; (d) período ciego; (e) informe con
+intervalos y veredicto; (f) recién ahí, el test en vivo en sombra (§8).
+
 ## 9. Qué cambia en la construcción (§5)
 
 Se agregan: `manager/sandbox/` (cartera virtual + simulador diario `simular_sandbox.py`), `registrar_decision.py`,
@@ -169,6 +234,9 @@ período X y de cumplir el criterio de promoción.
   Drive; veo `portfolio_snapshots/`, `portfolio_configs.json` y `portfolio_magic_numbers.json`. Pasame la ruta exacta.
 - Dónde viven hoy N1, N2, contexto y régimen (¿`strategy_checklist.py`, `contexto_estudio.py`, `LEEME_REGIMEN_DC.md`?).
 - Duración del período X y cómo querés registrar tus decisiones (comando o planilla).
+- Replay (§8b): ¿hay datos de mercado locales hasta hoy y cuánto tarda una corrida de `wfo_runner.py` por ventana?
+  ¿Qué estrategias/símbolos existían y validaban a nov-2025? ¿Qué reglas exactas tiene cada firma/cuenta (objetivo,
+  DD, costo de reset/compra)? ¿Cuál es el criterio de éxito prioritario: días a pasar o % que pasa sin quemar?
 - ¿Nube con puente por Drive, o tarea en la laptop con `claude -p`? (El sandbox necesita los ledger y series: en la
   laptop es directo.)
 - Qué cuentas son reales y cuáles de challenge hoy (ver `accounts_conditions.json`) y los costos de reset/compra.
