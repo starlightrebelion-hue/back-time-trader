@@ -53,6 +53,40 @@ sale linda por azar.
 7. **Cuando haya evidencia de edge**, la forma más barata de comprobarlo con plata real es una cuenta chica (1-Step Pro 5k
    ≈ 59, 10k ≈ 109 de lista) y el primer **pago cobrado**: eso es la prueba, no la curva.
 
+### P7. Meta de ingreso: cuánto capital fondeado hace falta y en qué escalones
+Gastos familiares: **~5.000 USD/mes** (alquiler, colegios); **mínimo para arreglarse: 2.500 USD/mes**.
+
+**Cuenta honesta.** En fase fondeada, un ritmo **sostenible** (que no quema cuentas) es del orden de **1,5–3 % por mes** de
+promedio, con meses negativos incluidos. Más que eso exige un riesgo que, con 10 % de pérdida máxima, rompe cuentas en el año.
+Además alguna cuenta fondeada se va a perder, y hay que reponerla; por eso se pide ~1,5× de colchón de capital.
+
+| Meta mensual neta | Capital fondeado a 2 %/mes | a 3 %/mes | Con colchón de reposición (~1,5×) |
+|---|---|---|---|
+| 2.500 (mínimo) | 125.000 | ~85.000 | **~150.000–200.000** |
+| 5.000 (normal) | 250.000 | ~170.000 | **~300.000–400.000** |
+
+- Las 4 cuentas actuales suman 275.000: **si se fondearan y rindieran 2 % sostenido, alcanzarían para el mínimo y se
+  acercarían al normal**. El problema hoy no es tamaño: es que todavía no pasan (P0).
+- cta3 cobra 90 %, las demás 100 %. Restar impuestos.
+- Más de 200–300k en una sola firma concentra el riesgo de contraparte y puede chocar con su tope por persona: repartir en 2–3.
+
+**Escalera de hitos (no saltear):**
+1. **Diagnóstico verde** (P0/P2): hay edge real en vivo después de costos.
+2. **Primer pago cobrado** (cualquier monto). Es la prueba de que el negocio funciona.
+3. **Los pagos cubren las cuotas + Claude** (~120 USD/mes): el negocio se autofinancia.
+4. **1.000 USD/mes durante 3 meses**: se reinvierte en cuentas (desde los pagos, no desde la plata de la casa).
+5. **2.500 USD/mes durante 6 meses** + **fondo de emergencia de 3–6 meses del mínimo (7.500–15.000)**: recién acá se puede
+   contar con esto para lo básico.
+6. **5.000 USD/mes**: escalar repartiendo entre firmas.
+
+**Plazos realistas, si el diagnóstico da verde:** fondear 4–8 meses, y llegar al hito 5 en el orden de **12–18 meses**. Hasta
+entonces, el trading tiene que ser un **complemento**, no la fuente de la que dependen alquiler y colegios. Si hoy no hay otro
+ingreso que cubra al menos el mínimo, conviene asegurar uno en paralelo: es lo que permite operar sin presión, y operar con
+presión (subir riesgo para llegar a fin de mes) es la forma más común de quemar cuentas.
+
+**En el brief diario**: barra de progreso por escalón, "meses del mínimo (2.500) cubiertos por pagos cobrados" y proyección
+con el edge ajustado por lo visto en vivo (no con el del backtest).
+
 ### P1. La única métrica que importa: el libro del negocio
 - `manager/negocio.csv`: cada cuota, reset, complemento y **cada pago cobrado** (fecha, cuenta, firma, monto, estado).
 - El brief abre con: **resultado neto del mes y acumulado**, pagos pendientes/próximos, cuotas gastadas, y
@@ -420,5 +454,5 @@ período X y de cumplir el criterio de promoción.
   laptop es directo.)
 - Qué cuentas son reales y cuáles de challenge hoy (ver `accounts_conditions.json`) y los costos de reset/compra.
 - (★) Historial de cuotas, resets y pagos cobrados hasta hoy, para arrancar el libro del negocio.
-- (★) Gastos mensuales de la familia (para medir "meses cubiertos") y presupuesto mensual de cuotas que podés arriesgar.
+- ~~Gastos mensuales y presupuesto~~ → respondido: 5.000/mes (mínimo 2.500); 50–100/mes de cuotas + 20 de Claude (ver P0, P7).
 - (★) Estado actual de cta2 (balance, mayor balance, piso) y regla de pérdida diaria confirmada en Metrix.
