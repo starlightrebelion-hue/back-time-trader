@@ -221,6 +221,67 @@ Es un backtest *de la gestión* (no solo de las estrategias): lo que se mide es 
 `sandbox/politicas`; (b) WFO a nov-2025 y cartera inicial; (c) calibración 3 meses; (d) período ciego; (e) informe con
 intervalos y veredicto; (f) recién ahí, el test en vivo en sombra (§8).
 
+## 8c. Objetivo de Argos y reglas de fondeo (definido por el usuario)
+
+**Función objetivo, en este orden:** (1) fondear con el **menor costo esperado** (precio + resets), (2) con el **máximo retorno**
+posible hasta pasar, (3) una vez fondeada, **modo estable**: bajar riesgo, proteger el colchón y cobrar. Alternativa a
+evaluar: **cuenta Instant** (sin challenge), que evita pagar el challenge pero tiene reglas más duras.
+
+**El árbol de decisión ya existe** (solapa "Calculadora de fondeo": `calculadora_fondeo.py` + `panel_fondeo.py`).
+Argos lo usa como herramienta, no lo reimplementa: `arbol()` elige por cuenta entre seguir / resetear / comprar nueva y el
+`account_risk_mult`, con `evaluar()` (challenge) y `evaluar_instant()` (Instant). Costo esperado por cuenta fondeada =
+`costo / (n_cuentas * p_pasa)`, con precios y descuentos de `accounts_conditions.json` (`_precios_fundingtraders`: p. ej. 1-Step
+Pro 25k $229, 50k $329, 100k $589; reset fase 1 con 60 % off, una sola vez; promo TRYFT 50 % en el primer challenge).
+
+**Reglas por tipo de cuenta que Argos debe respetar** (de `_reglas_firma_fundingtraders`, leídas el 2026-10-16):
+
+| | Pro 1-Step (cta2/3/4) | Swing 2-Step (cta1) | Instant |
+|---|---|---|---|
+| Objetivo | 10 % | 8 % + 5 % | cobro desde +3,5 % |
+| Pérdida máx. | 10 % trailing desde mayor balance, sin bloqueo | 10 % estática | **6 %** trailing hasta +3 %, después bloqueada en el inicial |
+| Pérdida diaria | **3 %** (equity inicio del día) | 5 % (balance) | 3 % |
+| Riesgo por idea | ≤ 2 % del inicial | — | ≤ 1 % por trade |
+| Otras | consistencia 50 % (mejor día ≤ 50 % de la ganancia), mín. 2 días | mín. 4 días | **pérdida flotante total ≤ 1 %**, consistencia 15 % |
+| Pago | 21 días (14 con complemento), vuelve al balance inicial | 14 días | a pedido, queda en inicial + 3 % |
+
+**Modo estable tras fondear** (nuevo en el árbol): al pasar, Argos cambia de objetivo a "cobrar sin romper": baja el
+`account_risk_mult`, respeta la consistencia (no concentrar ganancia en un día) y planifica el ciclo de pago; recordar que
+tras cada pago el piso de pérdida máxima se reinicia en el balance inicial (Pro). Se mide en el replay como una segunda fase.
+
+**Puntos a verificar antes de cablear (posibles discrepancias):**
+- Instant: el usuario recordaba **5 %** de pérdida máxima; la ayuda leída dice **6 %**, y `evaluar_instant` usa 6. Confirmar
+  en la firma y dejarlo como parámetro, no hardcodeado.
+- **Pérdida diaria**: la documentación del servidor (`VIGILANCIA_LAPTOP_agente.md`) habla de DD diario 4 % y guardián en 3,5 %,
+  mientras `accounts_conditions.json` da **3 %** para Pro 1-Step (cta2/3/4). Si el 3 % es el real, el guardián deja pasar días que rompen la
+  cuenta. Es lo primero a revisar porque afecta cuentas en vivo.
+- Instant: con 80 estrategias abiertas a la vez, la regla de **flotante ≤ 1 %** y **riesgo ≤ 1 % por trade** puede ser incompatible
+  con la cartera actual (que suma 6,4 % si abre todo). Argos debe construir una cartera específica para Instant.
+- Los 3 mult actuales están en ×1,25 y el riesgo por idea del 2 % también limita el escalador.
+
+## 8d. Argos arma la cartera: evaluar los métodos de construcción, diversificación y rebalanceo
+
+Hoy hay varias formas de armar y comparar carteras en el Thinker; en el replay se **evalúan como un experimento** y Argos
+elige entre ellas (no inventa pesos: elige *método + parámetros* de un menú acotado y Python lo ejecuta):
+
+| Pieza existente | Qué aporta | Variantes a comparar |
+|---|---|---|
+| `portfolio_candidato.py` | selección por categoría, símbolos no correlacionados, Deflated Sharpe (corrige por nº de pruebas), `seleccionar_candidatos(_multi)`, `buscar_curva_mas_aplanada`, `buscar_optuna`, score `dd_penalty`/K-ratio | tope por categoría y total; criterio de score |
+| `diversificacion.py` | cuántas estrategias por cuenta, 4 estilos de sizing (RP 1/σ, ERC, Kelly μ/σ², % fijo), al azar vs "mejores" (Sharpe, PF) vs oráculo, todo llevado al mismo DD p95 | N de estrategias, estilo de sizing, DD objetivo |
+| `pesos_cartera.py` / `aplicar_pesos_sandbox.py` | pesos aplicados reales (ERC del sandbox) | ERC estático vs. recalculado |
+| `tabs_portfolio.py` | armado y curva de equity como en Backtest | — |
+| Rebalanceo | frecuencia y disparador | nunca / mensual / ante drift / por vida útil |
+
+**Diseño del experimento (en el replay, con arranques escalonados):** matriz *constructor × sizing × N × rebalanceo* →
+métricas por celda (p_pasa, días, p_quiebra, costo por fondeada, retorno, DD p95, Sharpe, rotación). Se incluye el
+**oráculo** solo como techo de referencia. Argos entra en dos niveles: (1) elige la celda inicial con datos ≤ corte y
+(2) decide si rebalancear/rotar cada día de disparador. Se mide cuánto agrega cada decisión sobre la mejor celda **fija**: si
+no mejora a "elegir la mejor celda una vez y dejarla", la complejidad extra no se justifica. Mantener el recorte de edge (57 %)
+y el sesgo de selección ya documentados en `diversificacion.py`/`politicas_reentreno.py`.
+
+**Datos de mercado.** Se cargan desde MT5 en la laptop/servidor (puente) o con el script de extracción del Thinker
+(`barras.py`, `fetch_symbol_specs.py`). Para el replay: exportar una vez las barras por símbolo/timeframe hasta hoy a CSV y
+que el arnés las lea con filtro por fecha (punto-en-el-tiempo); `symbol_specs.json` para lotes, spreads y contract size.
+
 ## 9. Qué cambia en la construcción (§5)
 
 Se agregan: `manager/sandbox/` (cartera virtual + simulador diario `simular_sandbox.py`), `registrar_decision.py`,
@@ -234,6 +295,8 @@ período X y de cumplir el criterio de promoción.
   Drive; veo `portfolio_snapshots/`, `portfolio_configs.json` y `portfolio_magic_numbers.json`. Pasame la ruta exacta.
 - Dónde viven hoy N1, N2, contexto y régimen (¿`strategy_checklist.py`, `contexto_estudio.py`, `LEEME_REGIMEN_DC.md`?).
 - Duración del período X y cómo querés registrar tus decisiones (comando o planilla).
+- Reglas (§8c): confirmar con la firma la pérdida máxima del Instant (5 % vs 6 %) y la pérdida diaria real de Pro 1-Step (3 % vs 4 %
+  que usa el servidor). ¿Querés cuenta Instant como objetivo, además de challenge? ¿De qué tamaño?
 - Replay (§8b): ¿hay datos de mercado locales hasta hoy y cuánto tarda una corrida de `wfo_runner.py` por ventana?
   ¿Qué estrategias/símbolos existían y validaban a nov-2025? ¿Qué reglas exactas tiene cada firma/cuenta (objetivo,
   DD, costo de reset/compra)? ¿Cuál es el criterio de éxito prioritario: días a pasar o % que pasa sin quemar?
