@@ -6,6 +6,83 @@ Basado en lo que hay en Drive (`PYEABridge`): `monitor_gui.py`, `tabs_*.py`, `wf
 `cuenta_total.json`, `strategy_enabled.json`, `strategy_versions.json`, `portfolio_configs.json`,
 `wfo_pending_results.json`, `edge_check_results.json`).
 
+## ★ Prioridad: que sea rentable y sostenible (revisión 2026-11-17)
+
+Esta sección manda sobre el resto del plan. Todo lo demás (manager, brief, replay, Argos) es herramienta; el objetivo es
+**ingreso neto positivo, repetible y que no ponga en riesgo la plata de la familia**.
+
+**Honestidad primero.** Ningún plan garantiza ganancia. Con cuentas de fondeo, lo que se arriesga son las cuotas y resets; lo
+que se gana son los pagos. El negocio es rentable solo si, en el tiempo, **pagos cobrados > cuotas + resets + costos**
+(Claude, luz, VPS, impuestos). El trabajo del plan es averiguar eso rápido y barato, y escalar solo con evidencia.
+
+### P1. La única métrica que importa: el libro del negocio
+- `manager/negocio.csv`: cada cuota, reset, complemento y **cada pago cobrado** (fecha, cuenta, firma, monto, estado).
+- El brief abre con: **resultado neto del mes y acumulado**, pagos pendientes/próximos, cuotas gastadas, y
+  "meses de gastos familiares cubiertos". La curva de equity de una cuenta de fondeo no es plata hasta que se cobra.
+- Métricas de negocio: *costo por cuenta fondeada*, *pago medio por cuenta fondeada*, *vida media de una cuenta fondeada*
+  (cuántos ciclos de pago antes de quemarse), *retorno sobre cuotas* = pagos / cuotas. Rentable = retorno sobre cuotas > 1,5
+  sostenido 6 meses (margen para la mala racha).
+
+### P2. Antes de construir nada nuevo: ¿hay edge real en vivo?
+- Lo que se ve en `accounts_conditions.json` (al 2026-10-16) es preocupante: **cta2 (100k) estaba en 93.304 con piso en
+  90.060 (colchón ≈ 3,3 %)**, con el mayor balance en abril y casi plana desde septiembre. Siete meses sin avanzar en la cuenta
+  más grande es una señal a tomar en serio, no ruido a ignorar.
+- Primera tarea (1–2 días, Python puro sobre el ledger): **edge realizado en vivo vs. lo que prometía el backtest**, por cuenta
+  y por estrategia: R por trade real vs. OOS, con el recorte del 57 %. Si lo realizado está muy por debajo del backtest
+  recortado, el problema es de estrategia/ejecución, y ningún manager lo arregla: **primero corregir, después automatizar**.
+- Lo mismo con el replay (§8b): su primer entregable no es Argos, es responder "¿la cartera, gestionada de forma simple
+  (P0/P2), **pasa y cobra** con reglas y costos reales?". Si la respuesta es no, Argos no va a convertirla en sí.
+
+### P3. Arreglos de seguridad urgentes (antes que cualquier mejora)
+1. **Pérdida diaria**: el servidor trabaja con 4 % y guardián en 3,5 %; la firma (Pro 1-Step, cta2/3/4) dice **3 %**. Si es 3 %,
+   un día malo quema la cuenta con el guardián "contento". Confirmar en el panel Metrix hoy y, si es 3 %, bajar el
+   guardián a ~2,5 % en esas cuentas.
+2. **cta2**: en `cuenta_total.json` está en ×1,25, cuando la documentación de octubre decía ×0,75 para ella. Con ~3 % de colchón,
+   verificar hoy DD y colchón real; si sigue cerca del piso, bajar el riesgo de esa cuenta hasta que se recupere o decidir
+   reset con el árbol de fondeo.
+3. **Riesgo por idea ≤ 2 % del inicial** (regla Pro): validar que ninguna entrada, con el mult y entradas escalonadas, lo supere;
+   violarlo puede anular un pago aunque la cuenta gane.
+
+### P4. Sostenibilidad: no apostar todo a una sola carta
+- **Las 4 cuentas con la misma cartera son, en la práctica, una sola apuesta**: una mala semana las quema juntas. Opciones a
+  evaluar en el replay: carteras distintas por cuenta (menos correlación entre cuentas), o arranques/riesgos escalonados para
+  que nunca estén todas en la misma fase de DD.
+- **Riesgo de contraparte**: la firma puede cambiar reglas, demorar o negar pagos, o cerrar (pasó con varias en 2024–25).
+  Mitigación: cobrar en cada ciclo apenas se pueda (en Pro, cobrar además reinicia el piso), no acumular ganancia sin retirar,
+  y cuando haya evidencia de rentabilidad, repartir entre 2–3 firmas. Revisar el **tope de capital fondeado por persona** y
+  las reglas sobre operar la misma estrategia en varias cuentas.
+- **Fase fondeada = modo ingreso**: ya no se busca máximo retorno sino **pagos regulares y vida larga de la cuenta**. El
+  riesgo se fija para que la probabilidad de quemar la cuenta en 12 meses sea baja (p. ej. < 10–15 %), aunque cobre menos por mes.
+  Una cuenta que paga 2 % al mes durante 2 años vale mucho más que una que paga 6 % dos veces y se quema.
+
+### P5. Reglas de plata (para proteger a la familia)
+- **Presupuesto fijo de cuotas por mes**, que se pueda perder sin afectar gastos de la casa. Nunca comprar cuentas para
+  "recuperar" una quemada fuera de ese presupuesto.
+- **Stop del negocio**: si en 3 meses seguidos el resultado neto es negativo, o se quema el presupuesto trimestral, se
+  frenan compras y se vuelve a investigación hasta que el replay y el edge en vivo den verde.
+- **Destino de cada pago**, en este orden: (1) recuperar cuotas gastadas, (2) fondo de reserva de cuotas para 3 meses,
+  (3) **fondo de emergencia familiar de 6 meses de gastos**, (4) recién después, ingreso para la familia.
+- No depender del trading como **único** ingreso hasta tener **6+ meses seguidos de pagos** y el fondo de emergencia armado.
+- Impuestos: separar un % de cada pago desde el primero (consultar con un contador cómo se declaran los pagos de la firma).
+
+### P6. Orden de ejecución revisado (de lo que más plata protege/gana a lo que menos)
+| # | Qué | Por qué | Esfuerzo |
+|---|---|---|---|
+| 1 | Seguridad P3 (pérdida diaria, cta2, riesgo por idea) | evita quemar cuentas por configuración | horas |
+| 2 | Libro del negocio + brief mínimo (P1, §7 sin Argos) | ver si se gana plata de verdad | 1–2 días |
+| 3 | Edge realizado vs. backtest (P2) | saber si hay algo que escalar | 1–2 días |
+| 4 | Replay con políticas simples P0/P2 + árbol de fondeo (§8b, §8c) | ¿pasa y cobra con costos reales? | 1–2 semanas |
+| 5 | Matriz de construcción de cartera y cartera por cuenta (§8d, P4) | más pagos con menos quemas | 1 semana |
+| 6 | Argos en el replay, comparado contra la mejor política fija | ¿agrega valor la IA? | 1–2 semanas |
+| 7 | Argos en sombra en vivo (§8) y luego con tu OK | recién con evidencia | 1–3 meses |
+
+**Puertas de decisión (go / no-go):** después del paso 3 y del 4 se decide con números si seguir, corregir estrategias o
+frenar. Si en el paso 6 Argos no le gana a la mejor política fija, se usa la política fija (más simple y barata) y Argos queda
+solo para el brief.
+
+**Costo de la herramienta**: Claude decide solo en días con disparador; el resto lo hace Python. Su costo entra en el libro del
+negocio como cualquier otro gasto.
+
 ## 0. Restricción de arquitectura (condiciona todo)
 
 - Los servidores y MT5 corren en la **laptop Windows (LAPTOPMSI)**. El estado vivo (heartbeat, ledger,
@@ -303,3 +380,6 @@ período X y de cumplir el criterio de promoción.
 - ¿Nube con puente por Drive, o tarea en la laptop con `claude -p`? (El sandbox necesita los ledger y series: en la
   laptop es directo.)
 - Qué cuentas son reales y cuáles de challenge hoy (ver `accounts_conditions.json`) y los costos de reset/compra.
+- (★) Historial de cuotas, resets y pagos cobrados hasta hoy, para arrancar el libro del negocio.
+- (★) Gastos mensuales de la familia (para medir "meses cubiertos") y presupuesto mensual de cuotas que podés arriesgar.
+- (★) Estado actual de cta2 (balance, mayor balance, piso) y regla de pérdida diaria confirmada en Metrix.
