@@ -92,10 +92,83 @@ Aplica el recorte de edge (`confianza` 0,57). Hoy los 4 mult están en ×1,25 (e
 - **Credenciales**: `PYEA_runtime` contiene `email_alerts_config.json` (clave de app de Gmail); no exportar nunca eso a Drive.
 - **Simulaciones ≠ realidad**: `calculadora_fondeo` no modela intradía, slippage ni swaps; la quiebra real puede ser mayor.
 
-## 7. Pendiente de confirmar con vos
+## 7. Morning brief diario (agregado)
+
+Un solo documento cada mañana, `manager/brief_AAAA-MM-DD.md` (y aviso por mail/push), ordenado por urgencia:
+
+1. **Hoy hay que hacer** (máx. 5 ítems, con el comando exacto): alertas abiertas, aprobaciones pendientes de propuestas,
+   reentrenos/WFO que vencen, cuentas cerca de meta o de límite, eventos del día (apertura de semana, medianoche del bróker).
+2. **Estado de las 4 cuentas**: equity, DD trailing y diario, riesgo abierto, distancia a la meta de fondeo.
+3. **Decisiones de Argos de ayer y su resultado** (ver §8) y **desacuerdos** con lo que hiciste vos.
+4. **Propuestas nuevas** (pausar / rebalancear / reemplazar / mult de riesgo) con la evidencia y el nivel de confianza.
+5. **Resultados de las fases B–E** resumidos (drift, WFO, candidatas, fondeo).
+
+## 8. Test paralelo: Argos (sandbox) vs. vos (en vivo)
+
+Objetivo: durante un período X comparar, con las mismas reglas y los mismos datos, **las decisiones que tomás vos en vivo**
+contra **las que tomaría Argos (Claude Code)**, y auditar curva de equity, aciertos y fallos. Argos **no opera nada** en esta
+etapa: decide en un sandbox y se simula.
+
+**Diseño (champion / challenger, "shadow mode").**
+- *Cartera en vivo* = la real (`sizing_config_dynamic.json` de cada cuenta), con tus decisiones.
+- *Cartera Argos* = copia virtual (`manager/sandbox/argos_cartera.json`): arranca idéntica a la en vivo el día 0 y a partir
+  de ahí aplica solo lo que Argos decide cada mañana (pesos, pausas, reemplazos, mult).
+- Cada día, con los trades reales cerrados (ledger) y las series por estrategia (`portfolio_sim_series/`,
+  `simulador_cuentas.py`, `pesos_cartera.riesgo_efectivo`), se **recalcula la curva de equity de ambas carteras** con sus
+  pesos respectivos: es la misma lógica de la solapa en vivo, aplicada a la cartera virtual.
+- Contrafactual de las pausas/reemplazos: una estrategia que Argos pausa **sigue "en sombra"** (política P4 de
+  `politicas_reentreno.py`) para medir qué se perdió o se evitó; un reemplazo se simula con el OOS de la candidata. Se
+  marca como *estimado* (no ejecutable en vivo): esto es el punto más débil del test y se reporta con su margen.
+- Mismas reglas de firma en ambas (DD 10 % trailing, 4 % diario, escalador, guardián) para que la comparación sea justa.
+
+**Memoria persistida de decisiones** (`manager/memoria/decisiones.jsonl`, una línea por decisión, commiteada a git cada
+día: el historial de git hace de sello de tiempo y evita reescribir el pasado):
+
+```
+{id, fecha, decisor: "argos"|"usuario", tipo: "pausar|reactivar|peso|reemplazo|mult|reentrenar|nada",
+ objetivo: estrategia/cuenta, antes, despues, justificacion, evidencia (refs a archivos/cifras),
+ nivel_confianza, horizonte_eval_dias, regla_nivel: "N1"|"N2"|"contexto"|"regimen",
+ resultado: {estado: "pendiente|acierto|fallo|neutro", delta_R, delta_equity_pct, delta_dd, fecha_eval}}
+```
+- Tus decisiones las registrás vos (un comando `registrar_decision.py` o una planilla simple); si no, se infieren
+  del cambio de `sizing_config_dynamic.json` / `drift_autopausa.json` entre dos exportes.
+- Al cumplirse el horizonte (p. ej. 5 y 20 días hábiles), Argos **etiqueta el resultado** y escribe la lección
+  (`manager/memoria/lecciones.md`: qué patrón falló/acertó). Esa memoria se **relee al principio de cada brief**, para
+  que Argos no repita errores. Lo que escribe es auditable: nunca borra, solo agrega.
+
+**Niveles de validación en el test** (los estás evaluando): N1 = criterio base; N2 = confirmación; más las capas de
+**contexto** y **régimen**. Cada decisión de Argos lleva en `regla_nivel` qué capas la respaldaron. Así, al final del
+período se puede medir **qué capa agrega valor**: aciertos de decisiones con N1 solo vs. N1+N2 vs. N1+N2+contexto/régimen.
+Esto responde directamente a la duda de si vale la pena incorporar N2/contexto/régimen. Empezar con **N1 como regla
+de decisión** y registrar N2/contexto/régimen como *información adicional* (no bloqueante); promoverlas a regla solo si el
+test muestra mejora.
+
+**Métricas de la comparación (período X, sugerido ≥ 30 días hábiles; ideal 60–90):**
+- Curva de equity de ambas y diferencia acumulada; retorno, DD máximo, DD p95, Sharpe/Sortino, tiempo bajo el agua.
+- Tasa de acierto de decisiones, por tipo y por capa (N1/N2/contexto/régimen); R medio por decisión.
+- Desacuerdos usuario vs. Argos: en cuántos tuvo razón cada uno y de cuánto fue el delta.
+- Proximidad a la meta de fondeo y `t50` de `calculadora_fondeo` en ambas carteras.
+- Costo: cuántas decisiones/día y cuánto cambió la cartera (rotación).
+- Honestidad estadística: con ~30 días y pocas decisiones la diferencia no es significativa; el informe final da
+  intervalos (bootstrap de días) y dice "no concluyente" si no se separa del ruido.
+
+**Criterio de promoción (se fija ANTES de empezar, para no ajustarlo a posteriori):** Argos pasa de sandbox a *propuesta
+con tu OK en vivo* solo si, al cierre de X: (a) retorno ajustado por riesgo ≥ el tuyo, (b) DD máximo no peor, (c) cero
+violaciones de límites duros, y (d) la ventaja se mantiene en la segunda mitad del período (no solo en una racha).
+
+## 9. Qué cambia en la construcción (§5)
+
+Se agregan: `manager/sandbox/` (cartera virtual + simulador diario `simular_sandbox.py`), `registrar_decision.py`,
+`evaluar_decisiones.py` (etiqueta aciertos/fallos y arma la comparación de equity), y el template del brief. Fase 1 del
+plan (§4) pasa a ser: **brief + sandbox Argos en sombra, sin tocar nada en vivo**; el auto-aplicar queda para después del
+período X y de cumplir el criterio de promoción.
+
+## 10. Pendiente de confirmar con vos
 
 - Dónde están las reglas de la carpeta **`portfolio`** (topes por estrategia/símbolo, escala): no aparece en la raíz de
   Drive; veo `portfolio_snapshots/`, `portfolio_configs.json` y `portfolio_magic_numbers.json`. Pasame la ruta exacta.
-- Carpeta `strategies/` (backtest validadas): ¿el criterio de "validada" es `checklist_nivel2.json`?
-- ¿Nube con puente por Drive, o tarea en la laptop con `claude -p`?
+- Dónde viven hoy N1, N2, contexto y régimen (¿`strategy_checklist.py`, `contexto_estudio.py`, `LEEME_REGIMEN_DC.md`?).
+- Duración del período X y cómo querés registrar tus decisiones (comando o planilla).
+- ¿Nube con puente por Drive, o tarea en la laptop con `claude -p`? (El sandbox necesita los ledger y series: en la
+  laptop es directo.)
 - Qué cuentas son reales y cuáles de challenge hoy (ver `accounts_conditions.json`) y los costos de reset/compra.
